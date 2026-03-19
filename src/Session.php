@@ -40,12 +40,6 @@ class Session
     public $maxLifetime = 7200;
 
     /**
-     * 过期时间
-     * @var int
-     */
-    public $cookieExpires = 0;
-
-    /**
      * 有效的服务器路径
      * @var string
      */
@@ -84,18 +78,6 @@ class Session
      * @var Response
      */
     protected $response;
-
-    /**
-     * cookie是否已设置
-     * @var bool
-     */
-    protected $cookieSet = false;
-
-    /**
-     * 上次设置的cookie过期时间
-     * @var int
-     */
-    protected $lastCookieExpires = 0;
 
     /**
      * Session constructor.
@@ -159,12 +141,18 @@ class Session
      */
     public function set(string $name, $value)
     {
-        // 赋值
+        // 先判断是否是新会话
+        $isNew = !$this->handler->exists($this->getId());
+        
+        // 写入数据
         $this->handler->set($this->getId(), $name, $value);
-        // 更新生存时间
-        $this->handler->expire($this->getId(), $this->maxLifetime);
-        // 设置cookie（带去重逻辑）
-        $this->setCookie();
+        
+        // 新会话时，设置 cookie 和 Redis TTL
+        if ($isNew) {
+            $this->setCookie();
+            $this->handler->expire($this->getId(), $this->maxLifetime);
+        }
+        
         return true;
     }
 
@@ -176,9 +164,6 @@ class Session
      */
     public function get(string $name, $default = null)
     {
-        // 更新生存时间
-        $this->handler->expire($this->getId(), $this->maxLifetime);
-        // 返回值
         return $this->handler->get($this->getId(), $name, $default);
     }
 
@@ -221,29 +206,51 @@ class Session
     }
 
     /**
-     * 设置cookie（带去重逻辑）
+     * 设置cookie
      */
-    protected function setCookie()
+    public function setCookie()
     {
-        $currentExpires = time() + $this->maxLifetime;
+        $expires = time() + $this->maxLifetime;
         
-        // 单个请求内：只设置一次
-        // 跨请求：过期时间变化时重新设置
-        if ($this->cookieSet && $currentExpires === $this->lastCookieExpires) {
-            return;
-        }
-        
-        // 设置cookie
         $factory = new CookieFactory();
-        $cookie  = $factory->createCookie($this->name, $this->id, $currentExpires);
+        $cookie  = $factory->createCookie($this->name, $this->id, $expires);
         $cookie->withDomain($this->cookieDomain)
             ->withPath($this->cookiePath)
             ->withSecure($this->cookieSecure)
             ->withHttpOnly($this->cookieHttpOnly);
         $this->response->withAddedCookie($cookie);
-        
-        $this->cookieSet = true;
-        $this->lastCookieExpires = $currentExpires;
+    }
+
+    /**
+     * 刷新 Redis TTL
+     */
+    public function refreshTTL()
+    {
+        $this->handler->expire($this->getId(), $this->maxLifetime);
+    }
+
+    /**
+     * 设置过期时间并刷新全部
+     * @param int $seconds 过期秒数
+     * @return $this
+     */
+    public function setLifetime(int $seconds)
+    {
+        $this->maxLifetime = $seconds;
+        $this->refreshTTL();
+        $this->setCookie();
+        return $this;
+    }
+
+    /**
+     * 设置过期时间
+     * @param int $seconds 过期秒数
+     * @return $this
+     */
+    public function setMaxLifetime(int $seconds)
+    {
+        $this->maxLifetime = $seconds;
+        return $this;
     }
 
     /**
