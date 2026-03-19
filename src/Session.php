@@ -178,8 +178,6 @@ class Session
     {
         // 更新生存时间
         $this->handler->expire($this->getId(), $this->maxLifetime);
-        // 设置cookie（带去重逻辑）
-        $this->setCookie();
         // 返回值
         return $this->handler->get($this->getId(), $name, $default);
     }
