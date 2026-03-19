@@ -2,7 +2,7 @@
 
 namespace Haoa\MixSession\Handler;
 
-use Mix\Redis\Redis;
+use Haoa\MixRedis\Redis;
 
 /**
  * Class RedisHandler
