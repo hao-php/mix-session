@@ -86,6 +86,18 @@ class Session
     protected $response;
 
     /**
+     * cookie是否已设置
+     * @var bool
+     */
+    protected $cookieSet = false;
+
+    /**
+     * 上次设置的cookie过期时间
+     * @var int
+     */
+    protected $lastCookieExpires = 0;
+
+    /**
      * Session constructor.
      * @param HandlerInterface $handler
      */
@@ -151,14 +163,8 @@ class Session
         $this->handler->set($this->getId(), $name, $value);
         // 更新生存时间
         $this->handler->expire($this->getId(), $this->maxLifetime);
-        // 设置/更新cookie
-        $factory = new CookieFactory();
-        $cookie  = $factory->createCookie($this->name, $this->id, time() + $this->maxLifetime);
-        $cookie->withDomain($this->cookieDomain)
-            ->withPath($this->cookiePath)
-            ->withSecure($this->cookieSecure)
-            ->withHttpOnly($this->cookieHttpOnly);
-        $this->response->withAddedCookie($cookie);
+        // 设置cookie（带去重逻辑）
+        $this->setCookie();
         return true;
     }
 
@@ -172,14 +178,8 @@ class Session
     {
         // 更新生存时间
         $this->handler->expire($this->getId(), $this->maxLifetime);
-        // 设置/更新cookie
-        $factory = new CookieFactory();
-        $cookie  = $factory->createCookie($this->name, $this->id, time() + $this->maxLifetime);
-        $cookie->withDomain($this->cookieDomain)
-            ->withPath($this->cookiePath)
-            ->withSecure($this->cookieSecure)
-            ->withHttpOnly($this->cookieHttpOnly);
-        $this->response->withAddedCookie($cookie);
+        // 设置cookie（带去重逻辑）
+        $this->setCookie();
         // 返回值
         return $this->handler->get($this->getId(), $name, $default);
     }
@@ -220,6 +220,32 @@ class Session
     public function has(string $name)
     {
         return $this->handler->has($this->getId(), $name);
+    }
+
+    /**
+     * 设置cookie（带去重逻辑）
+     */
+    protected function setCookie()
+    {
+        $currentExpires = time() + $this->maxLifetime;
+        
+        // 单个请求内：只设置一次
+        // 跨请求：过期时间变化时重新设置
+        if ($this->cookieSet && $currentExpires === $this->lastCookieExpires) {
+            return;
+        }
+        
+        // 设置cookie
+        $factory = new CookieFactory();
+        $cookie  = $factory->createCookie($this->name, $this->id, $currentExpires);
+        $cookie->withDomain($this->cookieDomain)
+            ->withPath($this->cookiePath)
+            ->withSecure($this->cookieSecure)
+            ->withHttpOnly($this->cookieHttpOnly);
+        $this->response->withAddedCookie($cookie);
+        
+        $this->cookieSet = true;
+        $this->lastCookieExpires = $currentExpires;
     }
 
     /**
