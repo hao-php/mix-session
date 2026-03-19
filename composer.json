@@ -9,6 +9,6 @@
   },
   "require": {
     "mix/http-message": "^3.0",
-    "mix/redis": "^3.0"
+    "haoa/mix-redis": "^1.0"
   }
 }
